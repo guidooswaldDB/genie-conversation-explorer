@@ -47,7 +47,11 @@ def _render_copy_button(text: str, key_suffix: str, label: str = "📋 Copy SQL"
         height=40,
     )
 
-st.set_page_config(page_title="Genie Conversation Explorer", layout="wide")
+st.set_page_config(
+    page_title="Genie Conversation Explorer",
+    page_icon="✨",
+    layout="wide",
+)
 
 # Monospace font for all st.dataframe tables.
 st.markdown(
@@ -316,6 +320,19 @@ st.subheader("Conversation detail")
 if not selected_conv_id:
     st.info("Pick a conversation to see its details.")
 else:
+    summary_sql = Backend.conversation_summary_sql(
+        space_id=selected_space_id,
+        conversation_id=selected_conv_id,
+        literal=True,
+    )
+    with st.expander("SQL used to build this summary", expanded=False):
+        st.code(summary_sql, language="sql")
+        _render_copy_button(
+            summary_sql,
+            key_suffix=f"summarysql_{selected_conv_id}",
+            label="📋 Copy summary SQL",
+        )
+
     # Header metadata from the audit row we already have.
     audit_row = next(
         (c for c in conversations if c["conversation_id"] == selected_conv_id),
@@ -332,6 +349,21 @@ else:
                 "distinct_actions": audit_row.get("distinct_actions"),
             },
             expanded=False,
+        )
+
+    messages_curl = Backend.messages_request_curl(
+        selected_space_id, selected_conv_id
+    )
+    with st.expander("REST call used to fetch messages", expanded=False):
+        st.caption(
+            "Messages come from the Genie REST API — there is no equivalent SQL. "
+            "Paste this into a shell with `DATABRICKS_HOST` and `DATABRICKS_TOKEN` set."
+        )
+        st.code(messages_curl, language="bash")
+        _render_copy_button(
+            messages_curl,
+            key_suffix=f"msgcurl_{selected_conv_id}",
+            label="📋 Copy messages REST call",
         )
 
     messages, msg_err = cached_messages(selected_space_id, selected_conv_id)
@@ -397,6 +429,18 @@ else:
 
     st.markdown("---")
     st.markdown("**Audit trail (`system.access.audit`)**")
+    audit_events_sql = Backend.audit_events_for_conversation_sql(
+        space_id=selected_space_id,
+        conversation_id=selected_conv_id,
+        literal=True,
+    )
+    with st.expander("SQL used to build this trail", expanded=False):
+        st.code(audit_events_sql, language="sql")
+        _render_copy_button(
+            audit_events_sql,
+            key_suffix=f"auditsql_trail_{selected_conv_id}",
+            label="📋 Copy audit-trail SQL",
+        )
     if not selected_warehouse_id:
         st.caption("Pick a SQL warehouse to enable audit queries.")
     else:
@@ -411,6 +455,16 @@ else:
             st.caption("No audit events found for this conversation.")
 
     st.markdown("**Feedback events**")
+    feedback_sql = Backend.feedback_events_for_conversation_sql(
+        conversation_id=selected_conv_id, literal=True
+    )
+    with st.expander("SQL used to build this list", expanded=False):
+        st.code(feedback_sql, language="sql")
+        _render_copy_button(
+            feedback_sql,
+            key_suffix=f"feedbacksql_{selected_conv_id}",
+            label="📋 Copy feedback SQL",
+        )
     if selected_warehouse_id:
         feedback_rows = cached_feedback_audit(
             selected_space_id, selected_conv_id, selected_warehouse_id

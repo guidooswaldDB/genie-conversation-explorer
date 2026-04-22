@@ -168,6 +168,20 @@ class Backend:
         )
         return resp.get("messages", [])
 
+    @staticmethod
+    def messages_request_curl(space_id: str, conversation_id: str) -> str:
+        """Runnable curl snippet for the messages-retrieval REST call.
+
+        Uses the Databricks CLI-managed bearer token (`$DATABRICKS_TOKEN`) so
+        the user can paste and run without leaking credentials.
+        """
+        path = f"{GENIE_API_BASE}/{space_id}/conversations/{conversation_id}/messages"
+        return (
+            f"curl -sS \\\n"
+            f"  -H \"Authorization: Bearer $DATABRICKS_TOKEN\" \\\n"
+            f"  \"$DATABRICKS_HOST{path}\""
+        )
+
     # ---------- Statement Execution API ----------
 
     def _resolve_warehouse(self, warehouse_id: str | None) -> str:
@@ -288,6 +302,65 @@ class Backend:
         """
         return self._query(query, {"space_id": space_id}, warehouse_id=warehouse_id)
 
+    @staticmethod
+    def conversation_summary_sql(
+        space_id: str | None = None,
+        conversation_id: str | None = None,
+        literal: bool = False,
+    ) -> str:
+        """SQL that reproduces the audit-derived header metadata for one
+        conversation (created_by, created, last_activity, event_count, …)."""
+        space_expr = f"'{space_id}'" if literal and space_id else ":space_id"
+        conv_expr = f"'{conversation_id}'" if literal and conversation_id else ":conv_id"
+        return (
+            f"WITH events AS (\n"
+            f"    SELECT\n"
+            f"        request_params['conversation_id'] AS conversation_id,\n"
+            f"        user_identity.email                AS user_email,\n"
+            f"        event_time,\n"
+            f"        action_name\n"
+            f"    FROM {AUDIT_TABLE}\n"
+            f"    WHERE service_name IN ('genie', 'aibiGenie', 'dataRoom')\n"
+            f"      AND request_params['conversation_id'] = {conv_expr}\n"
+            f"      AND (\n"
+            f"          request_params['space_id'] = {space_expr}\n"
+            f"          OR request_params['room_id'] = {space_expr}\n"
+            f"      )\n"
+            f")\n"
+            f"SELECT\n"
+            f"    conversation_id,\n"
+            f"    min_by(user_email, event_time)   AS created_by,\n"
+            f"    min(event_time)                  AS created,\n"
+            f"    max(event_time)                  AS last_activity,\n"
+            f"    count(*)                         AS event_count,\n"
+            f"    count(DISTINCT action_name)      AS distinct_actions\n"
+            f"FROM events\n"
+            f"GROUP BY conversation_id"
+        )
+
+    @staticmethod
+    def audit_events_for_conversation_sql(
+        space_id: str | None = None,
+        conversation_id: str | None = None,
+        limit: int = 200,
+        literal: bool = False,
+    ) -> str:
+        space_expr = f"'{space_id}'" if literal and space_id else ":space_id"
+        conv_expr = f"'{conversation_id}'" if literal and conversation_id else ":conv_id"
+        return (
+            f"SELECT event_time, user_identity.email AS user_email, action_name,\n"
+            f"       request_params, response\n"
+            f"FROM {AUDIT_TABLE}\n"
+            f"WHERE service_name IN ('genie', 'aibiGenie', 'dataRoom')\n"
+            f"  AND request_params['conversation_id'] = {conv_expr}\n"
+            f"  AND (\n"
+            f"      request_params['space_id'] = {space_expr}\n"
+            f"      OR request_params['room_id'] = {space_expr}\n"
+            f"  )\n"
+            f"ORDER BY event_time DESC\n"
+            f"LIMIT {int(limit)}"
+        )
+
     def audit_events_for_conversation(
         self,
         space_id: str,
@@ -295,23 +368,31 @@ class Backend:
         limit: int = 200,
         warehouse_id: str | None = None,
     ) -> list[dict]:
-        query = f"""
-            SELECT event_time, user_identity.email AS user_email, action_name,
-                   request_params, response
-            FROM {AUDIT_TABLE}
-            WHERE service_name IN ('genie', 'aibiGenie', 'dataRoom')
-              AND request_params['conversation_id'] = :conv_id
-              AND (
-                  request_params['space_id'] = :space_id
-                  OR request_params['room_id'] = :space_id
-              )
-            ORDER BY event_time DESC
-            LIMIT {int(limit)}
-        """
+        query = self.audit_events_for_conversation_sql(limit=limit)
         return self._query(
             query,
             {"conv_id": conversation_id, "space_id": space_id},
             warehouse_id=warehouse_id,
+        )
+
+    @staticmethod
+    def feedback_events_for_conversation_sql(
+        conversation_id: str | None = None, limit: int = 200, literal: bool = False
+    ) -> str:
+        conv_expr = f"'{conversation_id}'" if literal and conversation_id else ":conv_id"
+        return (
+            f"SELECT event_time, user_identity.email AS user_email, action_name,\n"
+            f"       request_params, response\n"
+            f"FROM {AUDIT_TABLE}\n"
+            f"WHERE service_name IN ('genie', 'aibiGenie', 'dataRoom')\n"
+            f"  AND request_params['conversation_id'] = {conv_expr}\n"
+            f"  AND (\n"
+            f"      lower(action_name) LIKE '%feedback%'\n"
+            f"      OR lower(action_name) LIKE '%rating%'\n"
+            f"      OR lower(action_name) LIKE '%thumb%'\n"
+            f"  )\n"
+            f"ORDER BY event_time DESC\n"
+            f"LIMIT {int(limit)}"
         )
 
     def feedback_events_for_conversation(
@@ -321,20 +402,7 @@ class Backend:
         limit: int = 200,
         warehouse_id: str | None = None,
     ) -> list[dict]:
-        query = f"""
-            SELECT event_time, user_identity.email AS user_email, action_name,
-                   request_params, response
-            FROM {AUDIT_TABLE}
-            WHERE service_name IN ('genie', 'aibiGenie', 'dataRoom')
-              AND request_params['conversation_id'] = :conv_id
-              AND (
-                  lower(action_name) LIKE '%feedback%'
-                  OR lower(action_name) LIKE '%rating%'
-                  OR lower(action_name) LIKE '%thumb%'
-              )
-            ORDER BY event_time DESC
-            LIMIT {int(limit)}
-        """
+        query = self.feedback_events_for_conversation_sql(limit=limit)
         return self._query(
             query, {"conv_id": conversation_id}, warehouse_id=warehouse_id
         )
