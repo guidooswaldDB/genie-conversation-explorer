@@ -1,0 +1,12 @@
+resources:
+  apps:
+    genie_explorer:
+      name: genie-explorer-${bundle.target}
+      description: "Genie Conversation Explorer — browse Genie rooms, conversations, messages, and feedback."
+      source_code_path: ../src/app
+      resources:
+        - name: sql-warehouse
+          description: "Default SQL warehouse ID exposed to the app via env var."
+          sql_warehouse:
+            id: ${var.warehouse_id}
+            permission: CAN_USE

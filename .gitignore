@@ -1,0 +1,19 @@
+# Personal Claude Code config (machine-specific permissions)
+.claude/settings.local.json
+
+# Databricks bundle state
+.databricks/
+.bundle/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp

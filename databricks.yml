@@ -1,0 +1,23 @@
+bundle:
+  name: genie-explorer
+
+include:
+  - resources/*.yml
+
+variables:
+  warehouse_id:
+    description: SQL warehouse used for system.access.audit queries.
+    lookup:
+      warehouse: "Shared SQL Warehouse"
+
+targets:
+  dev:
+    default: true
+    mode: development
+    workspace:
+      profile: DEFAULT
+
+  prod:
+    mode: production
+    workspace:
+      profile: DEFAULT
