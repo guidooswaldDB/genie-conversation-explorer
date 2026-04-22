@@ -396,7 +396,14 @@ else:
                         if query.get("description"):
                             st.caption(query["description"])
                         if query.get("statement_id"):
-                            st.caption(f"statement_id: `{query['statement_id']}`")
+                            stmt_id = query["statement_id"]
+                            history_url = (
+                                f"{get_backend().host}/sql/history?queryId={stmt_id}"
+                            )
+                            st.caption(
+                                f"statement_id: `{stmt_id}` · "
+                                f"[open in Query History ↗]({history_url})"
+                            )
                         for thought in query.get("thoughts") or []:
                             tt = thought.get("thought_type", "").replace(
                                 "THOUGHT_TYPE_", ""
