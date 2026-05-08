@@ -170,3 +170,5 @@ databricks bundle run genie_explorer -t prod
 - [Configure authorization in a Databricks app](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/auth)
 - [Databricks Asset Bundles — Apps resources](https://docs.databricks.com/aws/en/dev-tools/bundles/resources)
 - [system.access.audit](https://docs.databricks.com/aws/en/admin/system-tables/audit-logs)
+
+DISCLAIMER: This application and accompanying source code are provided solely for demonstration and proof-of-concept purposes. They are not intended for production use. Databricks, Inc. makes no warranties, express or implied, regarding the functionality, completeness, reliability, or suitability of this software. Databricks assumes no liability for any damages, data loss, or other issues arising from the use of this demonstration material. Any deployment to production environments is the sole responsibility of the implementing party.
